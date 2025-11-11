@@ -279,10 +279,104 @@
     return true;
   }
 
+  // Patcher saveProduct pour utiliser directement les données des lignes de prix
+  function patchSaveProductToUseQuantities() {
+    // Attendre que saveProduct soit disponible
+    if (typeof window.saveProduct === 'function') {
+      const originalSaveProduct = window.saveProduct;
+      window.saveProduct = async function() {
+        // Synchroniser les inputs cachés avant la sauvegarde
+        syncHiddenInputs();
+        
+        // Récupérer les données directement depuis les lignes de prix
+        const quantities = getPriceRowsData();
+        
+        // Si on a des quantities depuis les nouvelles lignes, les utiliser directement
+        if (quantities.length > 0) {
+          // Mettre à jour productPrice avec le premier prix pour compatibilité
+          const priceInput = document.getElementById("productPrice");
+          if (priceInput && quantities[0]) {
+            priceInput.value = quantities[0].price.toString();
+          }
+          
+          // Mettre à jour productGrammages et productCustomPrices pour compatibilité
+          // IMPORTANT: Tous les prix doivent être dans customPrices, pas seulement ceux différents de basePrice
+          const grammagesInput = document.getElementById("productGrammages");
+          const customPricesInput = document.getElementById("productCustomPrices");
+          if (grammagesInput && customPricesInput) {
+            const grammages = quantities.map(q => q.grammage).join(", ");
+            // Mettre TOUS les prix dans customPrices, pas seulement ceux différents
+            const customPrices = quantities.map(q => `${q.grammage}:${q.price}`).join(", ");
+            grammagesInput.value = grammages;
+            customPricesInput.value = customPrices;
+          }
+        }
+        
+        // Appeler la fonction originale
+        const result = await originalSaveProduct.call(this);
+        
+        // Après la sauvegarde, s'assurer que les quantities sont bien sauvegardées
+        // en interceptant BackendData.saveData si nécessaire
+        if (quantities.length > 0) {
+          // Attendre un peu pour que la sauvegarde soit terminée
+          setTimeout(async () => {
+            try {
+              const products = await BackendData.loadData("products") || [];
+              const editingId = window.editingProductId;
+              
+              if (editingId) {
+                const productIndex = products.findIndex(p => p.id === editingId);
+                if (productIndex > -1 && (!products[productIndex].quantities || products[productIndex].quantities.length === 0)) {
+                  // Si les quantities ne sont pas là, les ajouter
+                  products[productIndex].quantities = quantities;
+                  await BackendData.saveData("products", products);
+                  if (window.Products && window.Products.loadProducts) {
+                    await window.Products.loadProducts();
+                  }
+                }
+              } else if (products.length > 0) {
+                // Nouveau produit, vérifier le dernier
+                const lastProduct = products[products.length - 1];
+                if (lastProduct && (!lastProduct.quantities || lastProduct.quantities.length === 0)) {
+                  const createdAt = new Date(lastProduct.createdAt);
+                  const now = new Date();
+                  if (now - createdAt < 2000) {
+                    lastProduct.quantities = quantities;
+                    await BackendData.saveData("products", products);
+                    if (window.Products && window.Products.loadProducts) {
+                      await window.Products.loadProducts();
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.error("Erreur lors de la vérification des quantities:", e);
+            }
+          }, 300);
+        }
+        
+        return result;
+      };
+      return true;
+    }
+    return false;
+  }
+  
   // Fonction d'initialisation
   function initPricePatch() {
     createHiddenInputs();
     updatePriceMenuVisibility();
+    
+    // Patcher saveProduct pour utiliser les quantities directement
+    if (!patchSaveProductToUseQuantities()) {
+      // Si saveProduct n'est pas encore disponible, réessayer après un délai
+      setTimeout(() => {
+        if (!patchSaveProductToUseQuantities()) {
+          // Réessayer encore une fois après un délai plus long
+          setTimeout(patchSaveProductToUseQuantities, 500);
+        }
+      }, 200);
+    }
     
     // Intercepter la soumission du formulaire pour valider les prix
     const form = document.getElementById("productForm");
