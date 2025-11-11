@@ -15,7 +15,6 @@ async function loadLoading() {
   document.getElementById("loadingAccentColor").value = loading.accentColor || "#6366f1";
   document.getElementById("loadingAnimation").value = loading.animation || "spinner";
   if (loading.background) updateLoadingBgPreview(loading.background);
-  if (loading.logo) updateLoadingLogoPreview(loading.logo);
 }
 
 function setupLoadingUI() {
@@ -32,8 +31,7 @@ function setupLoadingUI() {
         textColor: document.getElementById("loadingTextColor").value,
         accentColor: document.getElementById("loadingAccentColor").value,
         animation: document.getElementById("loadingAnimation").value,
-        background: document.getElementById("loadingBgUrl")?.value || "",
-        logo: document.getElementById("loadingLogoUrl")?.value || ""
+        background: document.getElementById("loadingBgUrl")?.value || ""
       };
       await BackendData.saveData("loadingscreen", loading);
       AdminUtils.showToast("Écran de chargement sauvegardé", "success");
@@ -136,98 +134,6 @@ function setupLoadingMediaUpload() {
     }
   }
 
-  const logoUpload = document.getElementById("loadingLogoUploadBtn");
-  const logoFile = document.getElementById("loadingLogoFile");
-  const logoUrlBtn = document.getElementById("loadingLogoUrlBtn");
-  const removeLogo = document.getElementById("removeLoadingLogoBtn");
-  const logoUrlInput = document.getElementById("loadingLogoUrl");
-  const logoPreview = document.getElementById("loadingLogoPreview");
-
-  if (logoUpload && logoFile) {
-    logoUpload.replaceWith(logoUpload.cloneNode(true));
-    const newLogoUpload = document.getElementById("loadingLogoUploadBtn");
-    if (newLogoUpload) {
-      newLogoUpload.addEventListener("click", () => logoFile.click());
-      logoFile.addEventListener("change", async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-          if (logoPreview) {
-            logoPreview.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Chargement...</div>';
-          }
-          const fileSize = file.size;
-          const sizeMB = (fileSize / 1048576).toFixed(2);
-          const hasBackend = backendAPI.baseUrl && backendAPI.baseUrl.trim() !== "";
-          let mediaUrl;
-          if (hasBackend) {
-            console.log("📤 Upload vers Vercel Blob...");
-            const uploadResult = await backendAPI.uploadFile(file, "loading");
-            if (!uploadResult.success || !uploadResult.url) {
-              throw new Error("Échec de l'upload");
-            }
-            mediaUrl = uploadResult.url;
-            console.log(`✅ Upload réussi: ${mediaUrl}`);
-            AdminUtils.showToast(`✅ Fichier uploadé vers le cloud (${sizeMB}MB)`, "success");
-          } else {
-            if (fileSize > 2097152) {
-              const message = `⚠️ Fichier trop volumineux (${sizeMB}MB). Les fichiers de plus de 2MB nécessitent un backend configuré avec Vercel Blob.`;
-              AdminUtils.showToast(message, "error");
-              if (logoPreview) {
-                logoPreview.innerHTML = `
-                  <div style="padding: 2rem; text-align: center; color: #ff6b6b;">
-                    <p style="font-weight: bold; margin-bottom: 1rem;">❌ Fichier trop volumineux pour localStorage</p>
-                    <p style="font-size: 0.9rem; margin-bottom: 1rem;">Taille: ${sizeMB}MB (limite: 2MB)</p>
-                    <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-top: 1rem;">💡 Configurez le backend dans les paramètres.</p>
-                  </div>
-                `;
-              }
-              e.target.value = "";
-              return;
-            }
-            console.log("📦 Conversion en DataURL pour localStorage...");
-            mediaUrl = await AdminUtils.readFileAsDataURL(file);
-          }
-          if (logoUrlInput) logoUrlInput.value = mediaUrl;
-          updateLoadingLogoPreview(mediaUrl);
-          if (!hasBackend) AdminUtils.showToast("Logo ajouté avec succès", "success");
-        } catch (error) {
-          console.error("Erreur upload:", error);
-          AdminUtils.showToast("Erreur lors de l'upload", "error");
-          if (logoPreview) logoPreview.innerHTML = "";
-        }
-      });
-    }
-  }
-
-  if (logoUrlBtn) {
-    logoUrlBtn.replaceWith(logoUrlBtn.cloneNode(true));
-    const newLogoUrlBtn = document.getElementById("loadingLogoUrlBtn");
-    if (newLogoUrlBtn) {
-      newLogoUrlBtn.addEventListener("click", () => {
-        const url = logoUrlInput?.value.trim() || "";
-        if (url) {
-          if (AdminUtils.isValidUrl(url) || url.startsWith("data:")) {
-            updateLoadingLogoPreview(url);
-            AdminUtils.showToast("URL validée", "success");
-          } else {
-            AdminUtils.showToast("URL invalide", "error");
-          }
-        }
-      });
-    }
-  }
-
-  if (removeLogo) {
-    removeLogo.replaceWith(removeLogo.cloneNode(true));
-    const newRemoveLogo = document.getElementById("removeLoadingLogoBtn");
-    if (newRemoveLogo) {
-      newRemoveLogo.addEventListener("click", () => {
-        if (logoUrlInput) logoUrlInput.value = "";
-        updateLoadingLogoPreview("");
-        AdminUtils.showToast("Logo retiré", "success");
-      });
-    }
-  }
 }
 
 function updateLoadingBgPreview(url) {
@@ -244,14 +150,6 @@ function updateLoadingBgPreview(url) {
   }
 }
 
-function updateLoadingLogoPreview(url) {
-  const preview = document.getElementById("loadingLogoPreview");
-  if (preview) {
-    preview.innerHTML = url
-      ? `<img src="${AdminUtils.escapeHtml(url)}" style="max-width: 120px; height: 120px; object-fit: contain;">`
-      : "";
-  }
-}
 
 window.Loading = {
   initLoading: initLoading
