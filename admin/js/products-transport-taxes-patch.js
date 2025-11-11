@@ -278,6 +278,21 @@
     }
   }
   
+  // Vérifier la configuration et afficher/masquer le menu Prix par quantité
+  async function updatePriceQuantityMenuVisibility() {
+    try {
+      const config = await BackendData.loadData("config");
+      const priceQuantityMenuEnabled = config.priceQuantityMenuEnabled !== false; // Par défaut true
+      
+      const container = document.getElementById("productTransportTaxesContainer");
+      if (container) {
+        container.style.display = priceQuantityMenuEnabled ? "" : "none";
+      }
+    } catch (error) {
+      console.error("Erreur lors de la vérification de la config:", error);
+    }
+  }
+  
   // Initialisation
   async function initTransportTaxes() {
     // Attendre que le formulaire soit disponible
@@ -303,6 +318,9 @@
         priceParent.parentNode.appendChild(taxesSection);
       }
     }
+    
+    // Vérifier la visibilité selon la config
+    await updatePriceQuantityMenuVisibility();
     
     // Charger les services actifs
     await loadActiveServices();
@@ -359,6 +377,7 @@
           if (modal && !modal.classList.contains("hidden")) {
             // Le modal est ouvert, charger les taxes après un court délai
             setTimeout(async () => {
+              await updatePriceQuantityMenuVisibility();
               await loadActiveServices();
               createTransportTaxesTable();
               createHiddenTransportTaxesInput();
@@ -473,6 +492,13 @@
         }
       }, true);
     }
+    
+    // Écouter les changements de configuration
+    window.addEventListener("adminDataUpdated", function(e) {
+      if (e.detail && e.detail.key === "config") {
+        updatePriceQuantityMenuVisibility();
+      }
+    });
   }
   
   

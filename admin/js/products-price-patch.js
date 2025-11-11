@@ -198,9 +198,38 @@
     return quantities;
   }
   
+  // Vérifier la configuration et afficher/masquer le menu Prix
+  async function updatePriceMenuVisibility() {
+    try {
+      const config = await BackendData.loadData("config");
+      const priceMenuEnabled = config.priceMenuEnabled !== false; // Par défaut true
+      
+      const priceFormGroup = document.querySelector('label[for="productPrice"]')?.closest('.form-group') || 
+                             document.getElementById("productPricesContainer")?.closest('.form-group');
+      
+      if (priceFormGroup) {
+        priceFormGroup.style.display = priceMenuEnabled ? "" : "none";
+      }
+      
+      const container = document.getElementById("productPricesContainer");
+      const addBtn = document.getElementById("addPriceRowBtn");
+      
+      if (container) {
+        container.style.display = priceMenuEnabled ? "" : "none";
+      }
+      
+      if (addBtn) {
+        addBtn.style.display = priceMenuEnabled ? "" : "none";
+      }
+    } catch (error) {
+      console.error("Erreur lors de la vérification de la config:", error);
+    }
+  }
+  
   // Fonction d'initialisation
   function initPricePatch() {
     createHiddenInputs();
+    updatePriceMenuVisibility();
     
     // Bouton pour ajouter une ligne de prix
     const addBtn = document.getElementById("addPriceRowBtn");
@@ -252,6 +281,7 @@
           if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
             if (!modal.classList.contains("hidden")) {
               setTimeout(() => {
+                updatePriceMenuVisibility();
                 createHiddenInputs();
                 const container = document.getElementById("productPricesContainer");
                 if (container && container.children.length === 0) {
@@ -265,6 +295,13 @@
       });
       observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
     }
+    
+    // Écouter les changements de configuration
+    window.addEventListener("adminDataUpdated", function(e) {
+      if (e.detail && e.detail.key === "config") {
+        updatePriceMenuVisibility();
+      }
+    });
   }
   
   // Attendre que le DOM et products.js soient chargés
