@@ -9,6 +9,7 @@
   }
 
   // Fonction pour obtenir les prix par service
+  // Les valeurs dans transportTaxes sont des PRIX FINAUX, pas des taxes à ajouter
   function getPricesByService(basePrice, transportTaxes, quantity, unit = "g") {
     if (!transportTaxes || !Array.isArray(transportTaxes) || transportTaxes.length === 0) {
       return { home: basePrice, postal: basePrice, meet: basePrice };
@@ -19,22 +20,23 @@
     const quantityStr = `${quantityNum}${unit}`;
     const quantityNumStr = String(quantityNum);
     
-    // Chercher la taxe correspondante (peut être "5g", "5", etc.)
-    const taxEntry = transportTaxes.find(t => {
+    // Chercher la configuration de prix correspondante (peut être "5g", "5", etc.)
+    const priceEntry = transportTaxes.find(t => {
       if (!t.quantity) return false;
       const tQty = String(t.quantity).trim();
       return tQty === quantityStr || tQty === quantityNumStr || 
              parseFloat(tQty.replace(/[^\d.]/g, '')) === quantityNum;
     });
     
-    if (!taxEntry || !taxEntry.services) {
+    if (!priceEntry || !priceEntry.services) {
       return { home: basePrice, postal: basePrice, meet: basePrice };
     }
 
+    // Les valeurs dans services sont des PRIX FINAUX, pas des taxes
     return {
-      home: basePrice + (parseFloat(taxEntry.services.home) || 0),
-      postal: basePrice + (parseFloat(taxEntry.services.postal) || 0),
-      meet: basePrice + (parseFloat(taxEntry.services.meet) || 0)
+      home: parseFloat(priceEntry.services.home) || basePrice,
+      postal: parseFloat(priceEntry.services.postal) || basePrice,
+      meet: parseFloat(priceEntry.services.meet) || basePrice
     };
   }
 
@@ -76,15 +78,17 @@
     
     // Sinon, afficher tous les prix disponibles
     const priceList = [];
-    // Vérifier si au moins un prix est différent du prix de base, ou si le prix de base est 0 et qu'il y a des taxes
-    const hasDifferentPrices = prices.home !== price || prices.postal !== price || prices.meet !== price;
-    const hasTaxesWithZeroBase = price === 0 && (prices.home > 0 || prices.postal > 0 || prices.meet > 0);
+    // Vérifier si au moins un prix est configuré (différent de 0 ou différent du prix de base)
+    const hasConfiguredPrices = (prices.home > 0 && prices.home !== price) || 
+                                 (prices.postal > 0 && prices.postal !== price) || 
+                                 (prices.meet > 0 && prices.meet !== price) ||
+                                 (price === 0 && (prices.home > 0 || prices.postal > 0 || prices.meet > 0));
     
-    if (hasDifferentPrices || hasTaxesWithZeroBase) {
-      // Afficher tous les prix qui sont différents de 0 ou différents du prix de base
-      if (prices.home > 0 && (prices.home !== price || price === 0)) priceList.push(`🚚 ${prices.home.toFixed(0)}€`);
-      if (prices.postal > 0 && (prices.postal !== price || price === 0)) priceList.push(`📦 ${prices.postal.toFixed(0)}€`);
-      if (prices.meet > 0 && (prices.meet !== price || price === 0)) priceList.push(`📍 ${prices.meet.toFixed(0)}€`);
+    if (hasConfiguredPrices) {
+      // Afficher tous les prix configurés (même si le prix de base est 0)
+      if (prices.home > 0) priceList.push(`🚚 ${prices.home.toFixed(0)}€`);
+      if (prices.postal > 0) priceList.push(`📦 ${prices.postal.toFixed(0)}€`);
+      if (prices.meet > 0) priceList.push(`📍 ${prices.meet.toFixed(0)}€`);
     }
     
     if (priceList.length > 0) {
@@ -384,6 +388,38 @@
               : "";
             const productKey = [product.id || baseName, variantLabel].filter(Boolean).join("::") || baseName;
 
+            // Obtenir le service sélectionné dans le panier pour calculer le prix final
+            let selectedService = null;
+            try {
+              // Chercher dans le DOM le service sélectionné
+              const activeServiceCard = document.querySelector(".service-card.active, .service-card.selected");
+              if (activeServiceCard) {
+                const serviceType = activeServiceCard.dataset.service || activeServiceCard.getAttribute("data-service");
+                if (serviceType) selectedService = serviceType;
+              }
+              // Sinon, chercher dans localStorage
+              if (!selectedService) {
+                const cartServicesStr = localStorage.getItem("site_cart_services");
+                if (cartServicesStr) {
+                  const cartServices = JSON.parse(cartServicesStr);
+                  if (cartServices.home) selectedService = "home";
+                  else if (cartServices.postal) selectedService = "postal";
+                  else if (cartServices.meet) selectedService = "meet";
+                }
+              }
+            } catch (e) {
+              console.error("Erreur lecture services:", e);
+            }
+
+            // Calculer le prix final selon le service sélectionné
+            const finalPrice = getPriceBySelectedService(
+              selectedPrice,
+              transportTaxes,
+              selectedQuantity?.grammage || 1,
+              selectedService,
+              selectedQuantity?.unit || defaultUnit
+            );
+
             let existingItem = window.cart.find(item => item.productKey === productKey);
             if (!existingItem) {
               existingItem = window.cart.find(item => 
@@ -394,7 +430,8 @@
             }
 
             if (existingItem) {
-              const unitPrice = existingItem.unitPrice || selectedPrice;
+              // Utiliser le prix final calculé selon le service
+              const unitPrice = finalPrice;
               existingItem.qty = (existingItem.qty || 1) + 1;
               existingItem.unitPrice = unitPrice;
               existingItem.price = unitPrice * existingItem.qty;
@@ -404,6 +441,7 @@
               existingItem.variant = existingItem.variant || variantLabel;
               existingItem.category = existingItem.category || category;
               existingItem.unit = existingItem.unit || selectedQuantity?.unit || defaultUnit;
+              existingItem.selectedService = selectedService; // Stocker le service pour référence
             } else {
               window.cart.push({
                 productKey: productKey,
@@ -411,13 +449,16 @@
                 category: category,
                 name: baseName,
                 title: baseName,
-                unitPrice: selectedPrice,
+                unitPrice: finalPrice, // Utiliser le prix final selon le service
                 qty: 1,
-                price: selectedPrice,
+                price: finalPrice,
                 image: imageUrl,
                 variant: variantLabel,
                 grammage: selectedQuantity?.grammage || null,
-                unit: selectedQuantity?.unit || defaultUnit
+                unit: selectedQuantity?.unit || defaultUnit,
+                selectedService: selectedService, // Stocker le service pour référence
+                transportTaxes: transportTaxes, // Stocker les taxes pour recalculer si nécessaire
+                basePrice: selectedPrice // Stocker le prix de base
               });
             }
 

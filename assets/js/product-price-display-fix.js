@@ -33,15 +33,18 @@
       return `${(product.price || 0).toFixed(2)}€`;
     }
 
-    // Si on a des taxes de transport, utiliser la fonction de formatage
+    // Si on a des prix par service configurés, utiliser la fonction de formatage
     if (window.formatProductPrice) {
-      // Prendre la première quantité par défaut
+      // Prendre la première quantité par défaut (ou utiliser le prix de base si pas de quantités)
       const firstQuantity = product.quantities && product.quantities.length > 0 
         ? product.quantities[0] 
         : { grammage: 1, price: product.price || 0, unit: product.unit || "g" };
       
+      // Utiliser le prix de base (même si 0) et les transportTaxes pour calculer les prix par service
+      const basePrice = firstQuantity.price || product.price || 0;
+      
       return window.formatProductPrice(
-        firstQuantity.price || product.price || 0,
+        basePrice,
         transportTaxes,
         firstQuantity.grammage || 1,
         config,
