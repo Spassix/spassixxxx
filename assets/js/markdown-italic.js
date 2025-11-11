@@ -1,4 +1,4 @@
-// Fonction pour convertir **texte** ou __texte__ en italique
+// Fonction pour convertir **texte** ou __texte__ en italique et préserver les sauts de ligne
 function parseMarkdownItalic(text) {
   if (!text) return "";
   
@@ -15,6 +15,9 @@ function parseMarkdownItalic(text) {
   
   // Convertir __texte__ en <em>texte</em>
   escaped = escaped.replace(/__([^_]+)__/g, "<em>$1</em>");
+  
+  // Convertir les sauts de ligne en <br> pour préserver le formatage
+  escaped = escaped.replace(/\n/g, "<br>");
   
   return escaped;
 }

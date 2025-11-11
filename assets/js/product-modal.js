@@ -154,7 +154,14 @@
         if (window.parseMarkdownItalic) {
           info.innerHTML = window.parseMarkdownItalic(infoText);
         } else {
-          info.textContent = infoText;
+          // Préserver les sauts de ligne en les convertissant en <br>
+          const escapedText = infoText
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+          info.innerHTML = escapedText.replace(/\n/g, "<br>");
         }
       }
     }
